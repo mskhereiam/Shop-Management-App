@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
-import { Lock, Mail, AlertOctagon, CheckCircle2, ArrowRight, UserCheck, Store, Shield } from 'lucide-react';
+import { Lock, Mail, AlertOctagon, CheckCircle2, ArrowRight, UserCheck, Store, Shield, Flame, ExternalLink, Key, Check, AlertCircle } from 'lucide-react';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { auth } from '../firebase';
+import { 
+  auth, 
+  getActiveFirebaseConfig, 
+  saveCustomFirebaseConfig, 
+  resetFirebaseConfigToDefault, 
+  isUsingCustomFirebaseConfig,
+  FirebaseCustomConfig
+} from '../firebase';
 import { Role, UserAuth } from '../types';
 
 interface LoginScreenProps {
@@ -16,6 +23,110 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  // Custom Firebase config modal
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const activeConfig = getActiveFirebaseConfig();
+  const isCustom = isUsingCustomFirebaseConfig();
+  const [configJsonInput, setConfigJsonInput] = useState('');
+  const [manualConfig, setManualConfig] = useState<FirebaseCustomConfig>({
+    apiKey: activeConfig.apiKey || '',
+    authDomain: activeConfig.authDomain || '',
+    projectId: activeConfig.projectId || '',
+    storageBucket: activeConfig.storageBucket || '',
+    messagingSenderId: activeConfig.messagingSenderId || '',
+    appId: activeConfig.appId || '',
+    databaseURL: activeConfig.databaseURL || '',
+    firestoreDatabaseId: activeConfig.firestoreDatabaseId || ''
+  });
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  const handleParseConfigJson = () => {
+    setConfigError(null);
+    try {
+      const trimmed = configJsonInput.trim();
+      if (!trimmed) {
+        setConfigError('অনুগ্রহ করে Firebase SDK config কোড বা JSON পেস্ট করুন।');
+        return;
+      }
+
+      let cleaned = trimmed;
+      if (cleaned.includes('{') && cleaned.includes('}')) {
+        const firstBrace = cleaned.indexOf('{');
+        const lastBrace = cleaned.lastIndexOf('}');
+        cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+      }
+
+      const jsonValidString = cleaned
+        .replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
+        .replace(/'/g, '"')
+        .replace(/,\s*}/g, '}');
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(jsonValidString);
+      } catch {
+        const apiKeyMatch = trimmed.match(/apiKey\s*:\s*["']([^"']+)["']/);
+        const projectIdMatch = trimmed.match(/projectId\s*:\s*["']([^"']+)["']/);
+        const authDomainMatch = trimmed.match(/authDomain\s*:\s*["']([^"']+)["']/);
+        const storageBucketMatch = trimmed.match(/storageBucket\s*:\s*["']([^"']+)["']/);
+        const appIdMatch = trimmed.match(/appId\s*:\s*["']([^"']+)["']/);
+        const messagingSenderIdMatch = trimmed.match(/messagingSenderId\s*:\s*["']([^"']+)["']/);
+        const databaseURLMatch = trimmed.match(/databaseURL\s*:\s*["']([^"']+)["']/);
+
+        if (apiKeyMatch && projectIdMatch) {
+          parsed = {
+            apiKey: apiKeyMatch[1],
+            projectId: projectIdMatch[1],
+            authDomain: authDomainMatch?.[1] || '',
+            storageBucket: storageBucketMatch?.[1] || '',
+            appId: appIdMatch?.[1] || '',
+            messagingSenderId: messagingSenderIdMatch?.[1] || '',
+            databaseURL: databaseURLMatch?.[1] || ''
+          };
+        } else {
+          throw new Error('Firebase কনফিগারেশন পার্স করা যায়নি।');
+        }
+      }
+
+      if (!parsed.apiKey || !parsed.projectId) {
+        setConfigError('Firebase কনফিগারেশনে অবশ্যই apiKey এবং projectId থাকতে হবে।');
+        return;
+      }
+
+      setManualConfig({
+        apiKey: parsed.apiKey || '',
+        authDomain: parsed.authDomain || '',
+        projectId: parsed.projectId || '',
+        storageBucket: parsed.storageBucket || '',
+        messagingSenderId: parsed.messagingSenderId || '',
+        appId: parsed.appId || '',
+        databaseURL: parsed.databaseURL || '',
+        firestoreDatabaseId: parsed.firestoreDatabaseId || ''
+      });
+      setConfigJsonInput('');
+    } catch (err: any) {
+      setConfigError(err?.message || 'কনফিগারেশন ফরম্যাট সঠিক নয়।');
+    }
+  };
+
+  const handleApplyFirebaseConfig = () => {
+    if (!manualConfig.apiKey.trim() || !manualConfig.projectId.trim()) {
+      setConfigError('অনুগ্রহ করে API Key এবং Project ID দিন।');
+      return;
+    }
+
+    saveCustomFirebaseConfig({
+      apiKey: manualConfig.apiKey.trim(),
+      authDomain: manualConfig.authDomain?.trim() || `${manualConfig.projectId.trim()}.firebaseapp.com`,
+      projectId: manualConfig.projectId.trim(),
+      storageBucket: manualConfig.storageBucket?.trim() || `${manualConfig.projectId.trim()}.appspot.com`,
+      messagingSenderId: manualConfig.messagingSenderId?.trim() || '',
+      appId: manualConfig.appId?.trim() || '',
+      databaseURL: manualConfig.databaseURL?.trim() || `https://${manualConfig.projectId.trim()}-default-rtdb.firebaseio.com`,
+      firestoreDatabaseId: manualConfig.firestoreDatabaseId?.trim() || '(default)'
+    });
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -239,7 +350,163 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             )}
           </button>
         </form>
+
+        {/* Custom Firebase Connect Button */}
+        <div className="pt-2 text-center border-t border-slate-800/80">
+          <button
+            type="button"
+            onClick={() => setShowConfigModal(true)}
+            className="text-[11px] text-slate-400 hover:text-amber-400 transition-colors flex items-center justify-center gap-1.5 mx-auto font-medium"
+          >
+            <Flame className="w-3.5 h-3.5 text-amber-500" />
+            <span>{isCustom ? `কাস্টম Firebase সক্রিয় (${activeConfig.projectId})` : 'কাস্টম Firebase প্রজেক্ট কনফিগার করুন'}</span>
+          </button>
+        </div>
       </div>
+
+      {/* Connect Custom Firebase Modal */}
+      {showConfigModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-xl rounded-3xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <Flame className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100">কাস্টম Firebase প্রজেক্ট যুক্ত করুন</h3>
+                  <p className="text-[11px] text-slate-400">Firebase Console থেকে Web SDK Config বসান</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowConfigModal(false)}
+                className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Helper */}
+            <div className="bg-indigo-950/30 border border-indigo-800/50 p-3 rounded-2xl text-[11px] text-indigo-200">
+              <b>Firebase Console</b> (console.firebase.google.com) &rarr; Project Settings &rarr; General &rarr; Your apps থেকে SDK snippet কপি করে নিচে দিন।
+            </div>
+
+            {/* Quick JSON Paste */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-300">
+                স্বয়ংক্রিয় পেস্ট (Paste Config JSON / Snippet)
+              </label>
+              <textarea
+                rows={3}
+                value={configJsonInput}
+                onChange={(e) => setConfigJsonInput(e.target.value)}
+                placeholder={`const firebaseConfig = {\n  apiKey: "AIzaSy...",\n  projectId: "my-shop-123",\n  authDomain: "my-shop.firebaseapp.com"\n};`}
+                className="w-full bg-slate-950 text-slate-100 p-2.5 rounded-xl border border-slate-700 font-mono text-[11px] focus:outline-none focus:border-amber-500"
+              />
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleParseConfigJson}
+                  className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center gap-1.5"
+                >
+                  <Key className="w-3.5 h-3.5 text-amber-400" />
+                  <span>ফিল্ডে বসান (Auto-Fill)</span>
+                </button>
+              </div>
+            </div>
+
+            {configError && (
+              <div className="p-3 bg-rose-950/40 border border-rose-800 rounded-xl text-xs text-rose-300 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{configError}</span>
+              </div>
+            )}
+
+            <div className="space-y-3 pt-2 border-t border-slate-800 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">API Key *</label>
+                  <input
+                    type="text"
+                    value={manualConfig.apiKey}
+                    onChange={(e) => setManualConfig({ ...manualConfig, apiKey: e.target.value })}
+                    placeholder="AIzaSy..."
+                    className="w-full bg-slate-950 text-slate-100 p-2 rounded-xl border border-slate-700 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">Project ID *</label>
+                  <input
+                    type="text"
+                    value={manualConfig.projectId}
+                    onChange={(e) => setManualConfig({ ...manualConfig, projectId: e.target.value })}
+                    placeholder="my-shop-project"
+                    className="w-full bg-slate-950 text-slate-100 p-2 rounded-xl border border-slate-700 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">Auth Domain</label>
+                  <input
+                    type="text"
+                    value={manualConfig.authDomain || ''}
+                    onChange={(e) => setManualConfig({ ...manualConfig, authDomain: e.target.value })}
+                    placeholder="my-shop.firebaseapp.com"
+                    className="w-full bg-slate-950 text-slate-100 p-2 rounded-xl border border-slate-700 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">Storage Bucket</label>
+                  <input
+                    type="text"
+                    value={manualConfig.storageBucket || ''}
+                    onChange={(e) => setManualConfig({ ...manualConfig, storageBucket: e.target.value })}
+                    placeholder="my-shop.appspot.com"
+                    className="w-full bg-slate-950 text-slate-100 p-2 rounded-xl border border-slate-700 font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+              {isCustom ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm('ডিফল্ট ফায়ারবেজে ফিরে যেতে চান?')) {
+                      resetFirebaseConfigToDefault();
+                    }
+                  }}
+                  className="text-xs text-rose-400 hover:underline"
+                >
+                  ডিফল্টে রিসেট করুন
+                </button>
+              ) : <div />}
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowConfigModal(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyFirebaseConfig}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  <span>কানেক্ট করুন</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
