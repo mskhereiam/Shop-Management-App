@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "Product": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "barcode": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "brandId": { "type": "string" },
+        "unitId": { "type": "string" },
+        "purchasePrice": { "type": "number" },
+        "salePrice": { "type": "number" },
+        "currentStock": { "type": "number" },
+        "minStock": { "type": "number" }
+      }
+    },
+    "Category": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "Customer": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" }
+      }
+    },
+    "SaleInvoice": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "grandTotal": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "collections": {
+      "products": { "entity": "Product" },
+      "categories": { "entity": "Category" },
+      "brands": { "entity": "Category" },
+      "units": { "entity": "Category" },
+      "customers": { "entity": "Customer" },
+      "suppliers": { "entity": "Customer" },
+      "sales": { "entity": "SaleInvoice" },
+      "purchases": { "entity": "SaleInvoice" },
+      "expenses": { "entity": "SaleInvoice" },
+      "incomes": { "entity": "SaleInvoice" },
+      "expenseCats": { "entity": "Category" },
+      "incomeCats": { "entity": "Category" },
+      "customerLedger": { "entity": "Category" },
+      "supplierLedger": { "entity": "Category" },
+      "stockMovements": { "entity": "Category" },
+      "settings": { "entity": "Category" }
+    }
+  }
+}
