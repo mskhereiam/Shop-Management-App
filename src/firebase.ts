@@ -82,6 +82,19 @@ export const storage: FirebaseStorage = getStorage(
   activeConfig.storageBucket || (activeConfig.projectId ? `${activeConfig.projectId}.appspot.com` : undefined)
 );
 
+// Initialize Firebase Analytics safely
+export let analytics: Analytics | null = null;
+if (typeof window !== 'undefined' && activeConfig.measurementId) {
+  isSupported().then((supported) => {
+    if (supported) {
+      analytics = getAnalytics(app);
+      console.log('Firebase Analytics initialized successfully');
+    }
+  }).catch((err) => {
+    console.warn('Analytics initialization skipped/unsupported:', err);
+  });
+}
+
 // Attempt anonymous sign in to satisfy security rules requiring auth
 if (typeof window !== 'undefined') {
   signInAnonymously(auth).then(() => {

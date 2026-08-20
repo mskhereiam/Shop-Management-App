@@ -22,7 +22,6 @@ import {
   UserAuth
 } from './types';
 import { initialProducts, initialCategories, initialBrands, initialUnits, initialCustomers, initialSuppliers, initialSalesInvoices, initialPurchases, initialExpenses, initialIncomes, initialExpenseCategories, initialIncomeCategories, initialSettings } from './data/initialData';
-import { loadStore, saveStore } from './data/store';
 import { 
   subscribeToCollection, 
   subscribeToSettings, 
@@ -72,6 +71,14 @@ export default function App() {
   const [darkMode, setDarkMode] = useState<boolean>(true);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
 
+  // Cleanup any legacy local storage business data caches
+  useEffect(() => {
+    try {
+      const keysToRemove = Object.keys(localStorage).filter((k) => k.startsWith('shopmind_'));
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch {}
+  }, []);
+
   // Monitor Google / Firebase Auth state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -109,35 +116,29 @@ export default function App() {
 
   const currentTenantId = userAuth?.uid;
 
-  // State initialization from localStorage or initialData
-  const [products, setProducts] = useState<Product[]>(() => loadStore('products', initialProducts, currentTenantId));
-  const [categories, setCategories] = useState<Category[]>(() => loadStore('categories', initialCategories, currentTenantId));
-  const [brands, setBrands] = useState<Brand[]>(() => loadStore('brands', initialBrands, currentTenantId));
-  const [units, setUnits] = useState<Unit[]>(() => loadStore('units', initialUnits, currentTenantId));
-  const [customers, setCustomers] = useState<Customer[]>(() => loadStore('customers', initialCustomers, currentTenantId));
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadStore('suppliers', initialSuppliers, currentTenantId));
-  const [sales, setSales] = useState<SaleInvoice[]>(() => loadStore('sales', initialSalesInvoices, currentTenantId));
-  const [purchases, setPurchases] = useState<PurchaseInvoice[]>(() => loadStore('purchases', initialPurchases, currentTenantId));
-  const [expenses, setExpenses] = useState<Expense[]>(() => loadStore('expenses', initialExpenses, currentTenantId));
-  const [incomes, setIncomes] = useState<Income[]>(() => loadStore('incomes', initialIncomes, currentTenantId));
-  const [expenseCats, setExpenseCats] = useState<ExpenseCategory[]>(() => loadStore('expenseCats', initialExpenseCategories, currentTenantId));
-  const [incomeCats, setIncomeCats] = useState<IncomeCategory[]>(() => loadStore('incomeCats', initialIncomeCategories, currentTenantId));
-  const [customerLedger, setCustomerLedger] = useState<CustomerLedgerEntry[]>(() => loadStore('customerLedger', [], currentTenantId));
-  const [supplierLedger, setSupplierLedger] = useState<SupplierLedgerEntry[]>(() => loadStore('supplierLedger', [], currentTenantId));
-  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() => loadStore('stockMovements', [], currentTenantId));
-  const [settings, setSettings] = useState<ShopSettings>(() => {
-    const s = loadStore('settings', initialSettings, currentTenantId);
-    if (!s || s.currencySymbol === '$') {
-      return { 
-        ...initialSettings, 
-        storeName: userAuth?.displayName || 'Smart Shop', 
-        companyName: userAuth?.displayName || 'Smart Shop',
-        currencySymbol: '৳', 
-        currencyCode: 'BDT' 
-      };
-    }
-    return s;
-  });
+  // Pure Cloud State Initialization (Firestore real-time subscription populates live data)
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [categories, setCategories] = useState<Category[]>(initialCategories);
+  const [brands, setBrands] = useState<Brand[]>(initialBrands);
+  const [units, setUnits] = useState<Unit[]>(initialUnits);
+  const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
+  const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
+  const [sales, setSales] = useState<SaleInvoice[]>(initialSalesInvoices);
+  const [purchases, setPurchases] = useState<PurchaseInvoice[]>(initialPurchases);
+  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
+  const [incomes, setIncomes] = useState<Income[]>(initialIncomes);
+  const [expenseCats, setExpenseCats] = useState<ExpenseCategory[]>(initialExpenseCategories);
+  const [incomeCats, setIncomeCats] = useState<IncomeCategory[]>(initialIncomeCategories);
+  const [customerLedger, setCustomerLedger] = useState<CustomerLedgerEntry[]>([]);
+  const [supplierLedger, setSupplierLedger] = useState<SupplierLedgerEntry[]>([]);
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
+  const [settings, setSettings] = useState<ShopSettings>(() => ({
+    ...initialSettings,
+    storeName: userAuth?.displayName || 'Smart Shop',
+    companyName: userAuth?.displayName || 'Smart Shop',
+    currencySymbol: '৳',
+    currencyCode: 'BDT'
+  }));
 
   // Dynamic Low Stock Notifications
   const notifications: NotificationItem[] = products
@@ -205,74 +206,60 @@ export default function App() {
     };
   }, [currentTenantId]);
 
-  // Auto Persist to Local Storage & Firestore Database per Tenant
+  // Auto Persist to Cloud Database (Firestore + RTDB + Supabase) per Tenant
   useEffect(() => { 
-    saveStore('products', products, currentTenantId); 
     if (currentTenantId) saveCollectionToFirestore('products', products, currentTenantId);
   }, [products, currentTenantId]);
 
   useEffect(() => { 
-    saveStore('categories', categories, currentTenantId); 
     if (currentTenantId) saveCollectionToFirestore('categories', categories, currentTenantId);
   }, [categories, currentTenantId]);
 
   useEffect(() => { 
-    saveStore('brands', brands, currentTenantId); 
     if (currentTenantId) saveCollectionToFirestore('brands', brands, currentTenantId);
   }, [brands, currentTenantId]);
 
   useEffect(() => { 
-    saveStore('units', units, currentTenantId); 
     if (currentTenantId) saveCollectionToFirestore('units', units, currentTenantId);
   }, [units, currentTenantId]);
 
   useEffect(() => { 
-    saveStore('customers', customers, currentTenantId); 
     if (currentTenantId) saveCollectionToFirestore('customers', customers, currentTenantId);
   }, [customers, currentTenantId]);
 
   useEffect(() => { 
-    saveStore('suppliers', suppliers, currentTenantId); 
     if (currentTenantId) saveCollectionToFirestore('suppliers', suppliers, currentTenantId);
   }, [suppliers, currentTenantId]);
 
   useEffect(() => { 
-    saveStore('sales', sales, currentTenantId); 
     if (currentTenantId) saveCollectionToFirestore('sales', sales, currentTenantId);
   }, [sales, currentTenantId]);
 
   useEffect(() => { 
-    saveStore('purchases', purchases, currentTenantId); 
     if (currentTenantId) saveCollectionToFirestore('purchases', purchases, currentTenantId);
   }, [purchases, currentTenantId]);
 
   useEffect(() => { 
-    saveStore('expenses', expenses, currentTenantId); 
     if (currentTenantId) saveCollectionToFirestore('expenses', expenses, currentTenantId);
   }, [expenses, currentTenantId]);
 
   useEffect(() => { 
-    saveStore('incomes', incomes, currentTenantId); 
     if (currentTenantId) saveCollectionToFirestore('incomes', incomes, currentTenantId);
   }, [incomes, currentTenantId]);
 
   useEffect(() => { 
-    saveStore('customerLedger', customerLedger, currentTenantId); 
     if (currentTenantId) saveCollectionToFirestore('customerLedger', customerLedger, currentTenantId);
   }, [customerLedger, currentTenantId]);
 
   useEffect(() => { 
-    saveStore('supplierLedger', supplierLedger, currentTenantId); 
     if (currentTenantId) saveCollectionToFirestore('supplierLedger', supplierLedger, currentTenantId);
   }, [supplierLedger, currentTenantId]);
 
   useEffect(() => { 
-    saveStore('stockMovements', stockMovements, currentTenantId); 
     if (currentTenantId) saveCollectionToFirestore('stockMovements', stockMovements, currentTenantId);
   }, [stockMovements, currentTenantId]);
 
   useEffect(() => { 
-    saveStore('settings', settings, currentTenantId); 
     if (currentTenantId) saveSettingsToFirestore(settings, currentTenantId);
   }, [settings, currentTenantId]);
 
@@ -563,6 +550,49 @@ export default function App() {
     deleteDocumentFromFirestore('sales', invoiceId, currentTenantId);
   };
 
+  const handleUpdateInvoice = (updatedInvoice: SaleInvoice) => {
+    setSales((prev) =>
+      prev.map((inv) => (inv.id === updatedInvoice.id ? updatedInvoice : inv))
+    );
+    saveDocumentToFirestore('sales', updatedInvoice, currentTenantId);
+  };
+
+  const handleUpdatePurchase = (updatedPO: PurchaseInvoice) => {
+    setPurchases((prev) =>
+      prev.map((po) => (po.id === updatedPO.id ? updatedPO : po))
+    );
+    saveDocumentToFirestore('purchases', updatedPO, currentTenantId);
+  };
+
+  const handleDeletePurchase = (poId: string) => {
+    setPurchases((prev) => prev.filter((po) => po.id !== poId));
+    deleteDocumentFromFirestore('purchases', poId, currentTenantId);
+  };
+
+  const handleUpdateExpense = (updatedExp: Expense) => {
+    setExpenses((prev) =>
+      prev.map((e) => (e.id === updatedExp.id ? updatedExp : e))
+    );
+    saveDocumentToFirestore('expenses', updatedExp, currentTenantId);
+  };
+
+  const handleDeleteExpense = (expId: string) => {
+    setExpenses((prev) => prev.filter((e) => e.id !== expId));
+    deleteDocumentFromFirestore('expenses', expId, currentTenantId);
+  };
+
+  const handleUpdateIncome = (updatedInc: Income) => {
+    setIncomes((prev) =>
+      prev.map((i) => (i.id === updatedInc.id ? updatedInc : i))
+    );
+    saveDocumentToFirestore('incomes', updatedInc, currentTenantId);
+  };
+
+  const handleDeleteIncome = (incId: string) => {
+    setIncomes((prev) => prev.filter((i) => i.id !== incId));
+    deleteDocumentFromFirestore('incomes', incId, currentTenantId);
+  };
+
   // Supplier Payment
   const handlePaySupplier = (supplierId: string, amount: number, method: PaymentMethod, note: string) => {
     const supp = suppliers.find((s) => s.id === supplierId);
@@ -721,12 +751,15 @@ export default function App() {
             <SalesDirectoryView
               sales={sales}
               settings={settings}
+              products={products}
+              customers={customers}
               onViewInvoice={(inv) => {
                 setActiveInvoice(inv);
                 setIsInvoiceModalOpen(true);
               }}
               onReceiveDuePayment={handleReceiveSaleDuePayment}
               onDeleteInvoice={handleDeleteInvoice}
+              onUpdateInvoice={handleUpdateInvoice}
               onNavigateToPOS={() => setActiveTab('pos')}
             />
           )}
@@ -779,6 +812,8 @@ export default function App() {
               products={products}
               settings={settings}
               onSavePurchase={handleSavePurchase}
+              onUpdatePurchase={handleUpdatePurchase}
+              onDeletePurchase={handleDeletePurchase}
             />
           )}
 
@@ -788,8 +823,18 @@ export default function App() {
               customerLedger={customerLedger}
               settings={settings}
               onSaveCustomer={(c) => {
-                setCustomers((prev) => [c, ...prev]);
+                setCustomers((prev) => {
+                  const exists = prev.some((item) => item.id === c.id);
+                  if (exists) {
+                    return prev.map((item) => (item.id === c.id ? c : item));
+                  }
+                  return [c, ...prev];
+                });
                 saveDocumentToFirestore('customers', c, currentTenantId);
+              }}
+              onDeleteCustomer={(id) => {
+                setCustomers((prev) => prev.filter((c) => c.id !== id));
+                deleteDocumentFromFirestore('customers', id, currentTenantId);
               }}
               onReceiveCustomerPayment={handleReceiveCustomerPayment}
             />
@@ -801,8 +846,18 @@ export default function App() {
               supplierLedger={supplierLedger}
               settings={settings}
               onSaveSupplier={(s) => {
-                setSuppliers((prev) => [s, ...prev]);
+                setSuppliers((prev) => {
+                  const exists = prev.some((item) => item.id === s.id);
+                  if (exists) {
+                    return prev.map((item) => (item.id === s.id ? s : item));
+                  }
+                  return [s, ...prev];
+                });
                 saveDocumentToFirestore('suppliers', s, currentTenantId);
+              }}
+              onDeleteSupplier={(id) => {
+                setSuppliers((prev) => prev.filter((s) => s.id !== id));
+                deleteDocumentFromFirestore('suppliers', id, currentTenantId);
               }}
               onPaySupplier={handlePaySupplier}
             />
@@ -845,6 +900,10 @@ export default function App() {
                 setIncomes((prev) => [i, ...prev]);
                 saveDocumentToFirestore('incomes', i, currentTenantId);
               }}
+              onUpdateExpense={handleUpdateExpense}
+              onDeleteExpense={handleDeleteExpense}
+              onUpdateIncome={handleUpdateIncome}
+              onDeleteIncome={handleDeleteIncome}
               initialType="expense"
             />
           )}

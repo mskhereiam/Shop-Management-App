@@ -13,52 +13,7 @@ import {
   get as rtdbGet 
 } from 'firebase/database';
 import { db, rtdb } from '../firebase';
-
-function getCacheKey(key: string, tenantId?: string): string {
-  if (tenantId && tenantId.trim()) {
-    const cleanTenant = tenantId.replace(/[^a-zA-Z0-9_-]/g, '_');
-    return `shopmind_${cleanTenant}_${key}_v1`;
-  }
-  return `shopmind_${key}_v1`;
-}
-
-function getLocalCache<T>(key: string, tenantId?: string): T[] | null {
-  try {
-    const item = localStorage.getItem(getCacheKey(key, tenantId));
-    if (item) {
-      const parsed = JSON.parse(item);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch (e) {
-    console.warn(`Error reading local cache for ${key}`, e);
-  }
-  return null;
-}
-
-function updateLocalCache<T extends { id: string }>(key: string, item: T, tenantId?: string) {
-  try {
-    const list = getLocalCache<T>(key, tenantId) || [];
-    const idx = list.findIndex((x) => x.id === item.id);
-    if (idx >= 0) {
-      list[idx] = item;
-    } else {
-      list.unshift(item);
-    }
-    localStorage.setItem(getCacheKey(key, tenantId), JSON.stringify(list));
-  } catch (e) {
-    console.warn(`Error updating local cache for ${key}`, e);
-  }
-}
-
-function removeFromLocalCache(key: string, docId: string, tenantId?: string) {
-  try {
-    const list = getLocalCache<{ id: string }>(key, tenantId) || [];
-    const filtered = list.filter((x) => x.id !== docId);
-    localStorage.setItem(getCacheKey(key, tenantId), JSON.stringify(filtered));
-  } catch (e) {
-    console.warn(`Error removing from local cache for ${key}`, e);
-  }
-}
+import { syncDocToSupabase, deleteDocFromSupabase } from '../supabase';
 
 /**
  * Strips out `undefined` values recursively because Firestore/RTDB reject `undefined` values.
@@ -93,7 +48,8 @@ function getRtdbPath(collectionName: string, docId?: string, tenantId?: string):
 }
 
 /**
- * Utility to listen to a Firestore collection for a specific tenant/user and fall back/seed initial data if empty.
+ * Utility to listen to a Firestore collection in real-time for a specific tenant/user.
+ * Pure Cloud-Driven: Directly populates from Firestore and syncs with Supabase / RTDB.
  */
 export function subscribeToCollection<T extends { id: string }>(
   collectionName: string,
@@ -107,11 +63,9 @@ export function subscribeToCollection<T extends { id: string }>(
     colRef,
     async (snapshot) => {
       if (snapshot.empty) {
-        // Check local cache for this tenant
-        const cached = getLocalCache<T>(collectionName, tenantId);
-        let dataToSeed = cached && cached.length > 0 ? cached : initialData;
+        let dataToSeed = initialData;
 
-        // Also check Realtime Database before seeding
+        // Check Realtime Database before seeding
         try {
           if (rtdb) {
             const rtdbSnap = await rtdbGet(rtdbRef(rtdb, getRtdbPath(collectionName, undefined, tenantId)));
@@ -139,7 +93,7 @@ export function subscribeToCollection<T extends { id: string }>(
               }
             });
             await batch.commit();
-            console.log(`Firestore seeded collection '${collectionName}' (${tenantId || 'global'}) with ${dataToSeed.length} items`);
+            console.log(`Firestore cloud seeded collection '${collectionName}' (${tenantId || 'global'})`);
           } catch (err: any) {
             console.warn(`Firestore collection '${collectionName}' seed note:`, err?.message || err);
           }
@@ -164,10 +118,6 @@ export function subscribeToCollection<T extends { id: string }>(
         snapshot.forEach((docSnap) => {
           items.push(docSnap.data() as T);
         });
-        // Cache to localStorage
-        try {
-          localStorage.setItem(getCacheKey(collectionName, tenantId), JSON.stringify(items));
-        } catch {}
         onData(items);
       }
     },
@@ -180,7 +130,8 @@ export function subscribeToCollection<T extends { id: string }>(
 }
 
 /**
- * Utility to save or update a document in Firestore, Realtime Database, and Local Cache for a user
+ * Utility to save or update a document in Firestore, Realtime Database, and Supabase PostgreSQL.
+ * No localStorage write.
  */
 export async function saveDocumentToFirestore<T extends { id: string }>(
   collectionName: string,
@@ -190,19 +141,16 @@ export async function saveDocumentToFirestore<T extends { id: string }>(
   if (!item || !item.id) return;
   const cleanItem = cleanForFirestore(item);
 
-  // 1. Update local cache immediately
-  updateLocalCache(collectionName, cleanItem, tenantId);
-
-  // 2. Save to Firestore
+  // 1. Save to Firestore
   try {
     const docRef = getFirestoreDocRef(collectionName, item.id, tenantId);
     await setDoc(docRef, cleanItem, { merge: true });
     console.log(`Firestore saved '${collectionName}/${item.id}' for tenant ${tenantId || 'global'}`);
   } catch (error: any) {
-    console.error(`Firestore save '${collectionName}/${item.id}' error:`, error?.message || error);
+    console.warn(`Firestore save '${collectionName}/${item.id}' note:`, error?.message || error);
   }
 
-  // 3. Save to Realtime Database
+  // 2. Save to Realtime Database
   try {
     if (rtdb) {
       const nodeRef = rtdbRef(rtdb, getRtdbPath(collectionName, String(item.id), tenantId));
@@ -211,10 +159,16 @@ export async function saveDocumentToFirestore<T extends { id: string }>(
   } catch (rtdbError: any) {
     console.warn(`RTDB save '${collectionName}/${item.id}' note:`, rtdbError?.message || rtdbError);
   }
+
+  // 3. Sync to Supabase PostgreSQL Database
+  syncDocToSupabase(collectionName, cleanItem, tenantId).catch((err) => {
+    console.warn(`Supabase sync '${collectionName}' background note:`, err);
+  });
 }
 
 /**
- * Utility to delete a document from Firestore, Realtime Database, and Local Cache for a user
+ * Utility to delete a document from Firestore, Realtime Database, and Supabase PostgreSQL.
+ * No localStorage write.
  */
 export async function deleteDocumentFromFirestore(
   collectionName: string,
@@ -223,19 +177,16 @@ export async function deleteDocumentFromFirestore(
 ): Promise<void> {
   if (!docId) return;
 
-  // 1. Remove from local cache
-  removeFromLocalCache(collectionName, docId, tenantId);
-
-  // 2. Delete from Firestore
+  // 1. Delete from Firestore
   try {
     const docRef = getFirestoreDocRef(collectionName, docId, tenantId);
     await deleteDoc(docRef);
     console.log(`Firestore deleted '${collectionName}/${docId}' for tenant ${tenantId || 'global'}`);
   } catch (error: any) {
-    console.error(`Firestore delete '${collectionName}/${docId}' error:`, error?.message || error);
+    console.warn(`Firestore delete '${collectionName}/${docId}' note:`, error?.message || error);
   }
 
-  // 3. Delete from Realtime Database
+  // 2. Delete from Realtime Database
   try {
     if (rtdb) {
       const nodeRef = rtdbRef(rtdb, getRtdbPath(collectionName, String(docId), tenantId));
@@ -244,10 +195,15 @@ export async function deleteDocumentFromFirestore(
   } catch (rtdbError: any) {
     console.warn(`RTDB delete '${collectionName}/${docId}' note:`, rtdbError?.message || rtdbError);
   }
+
+  // 3. Delete from Supabase PostgreSQL
+  deleteDocFromSupabase(collectionName, docId).catch((err) => {
+    console.warn(`Supabase delete '${collectionName}' background note:`, err);
+  });
 }
 
 /**
- * Utility to save an entire array of items to Firestore and Realtime Database for a user
+ * Utility to save an entire array of items to Firestore and Realtime Database for a user.
  */
 export async function saveCollectionToFirestore<T extends { id: string }>(
   collectionName: string,
@@ -255,11 +211,6 @@ export async function saveCollectionToFirestore<T extends { id: string }>(
   tenantId?: string
 ): Promise<void> {
   if (!items || !Array.isArray(items) || items.length === 0) return;
-  
-  // Cache in localStorage
-  try {
-    localStorage.setItem(getCacheKey(collectionName, tenantId), JSON.stringify(items));
-  } catch {}
 
   // 1. Batch write to Firestore
   try {
@@ -299,15 +250,11 @@ export async function saveCollectionToFirestore<T extends { id: string }>(
 }
 
 /**
- * Save single settings document to Firestore, Realtime Database, and Local Cache for a user
+ * Save single settings document directly to Firestore and Realtime Database.
  */
 export async function saveSettingsToFirestore<T>(settings: T, tenantId?: string): Promise<void> {
   if (!settings) return;
   const cleanSettings = cleanForFirestore(settings);
-
-  try {
-    localStorage.setItem(getCacheKey('settings', tenantId), JSON.stringify(cleanSettings));
-  } catch {}
 
   try {
     const docRef = tenantId && tenantId.trim()
@@ -316,7 +263,7 @@ export async function saveSettingsToFirestore<T>(settings: T, tenantId?: string)
     await setDoc(docRef, cleanSettings, { merge: true });
     console.log(`Firestore saved settings for tenant ${tenantId || 'global'}`);
   } catch (error: any) {
-    console.error('Firestore save settings error:', error?.message || error);
+    console.warn('Firestore save settings note:', error?.message || error);
   }
 
   try {
@@ -330,7 +277,7 @@ export async function saveSettingsToFirestore<T>(settings: T, tenantId?: string)
 }
 
 /**
- * Subscribe to settings document for a user
+ * Subscribe to settings document in real-time from Firestore.
  */
 export function subscribeToSettings<T>(
   initialSettings: T,
@@ -346,9 +293,6 @@ export function subscribeToSettings<T>(
     async (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as T;
-        try {
-          localStorage.setItem(getCacheKey('settings', tenantId), JSON.stringify(data));
-        } catch {}
         onData(data);
       } else {
         try {
@@ -371,5 +315,3 @@ export function subscribeToSettings<T>(
 
   return unsubscribe;
 }
-
-
