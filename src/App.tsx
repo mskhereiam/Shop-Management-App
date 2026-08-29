@@ -114,7 +114,7 @@ export default function App() {
     localStorage.removeItem('shop_user_auth');
   };
 
-  const currentTenantId = userAuth?.uid;
+  const currentTenantId = userAuth?.uid || 'default';
 
   // Pure Cloud State Initialization (Firestore real-time subscription populates live data)
   const [products, setProducts] = useState<Product[]>(initialProducts);
@@ -158,8 +158,6 @@ export default function App() {
 
   // Real-time Firestore Subscriptions per User/Tenant
   useEffect(() => {
-    if (!currentTenantId) return;
-
     const userInitialSettings: ShopSettings = {
       ...initialSettings,
       storeName: userAuth?.displayName || 'Smart Shop',
@@ -205,63 +203,6 @@ export default function App() {
       unsubSettings();
     };
   }, [currentTenantId]);
-
-  // Auto Persist to Cloud Database (Firestore + RTDB + Supabase) per Tenant
-  useEffect(() => { 
-    if (currentTenantId) saveCollectionToFirestore('products', products, currentTenantId);
-  }, [products, currentTenantId]);
-
-  useEffect(() => { 
-    if (currentTenantId) saveCollectionToFirestore('categories', categories, currentTenantId);
-  }, [categories, currentTenantId]);
-
-  useEffect(() => { 
-    if (currentTenantId) saveCollectionToFirestore('brands', brands, currentTenantId);
-  }, [brands, currentTenantId]);
-
-  useEffect(() => { 
-    if (currentTenantId) saveCollectionToFirestore('units', units, currentTenantId);
-  }, [units, currentTenantId]);
-
-  useEffect(() => { 
-    if (currentTenantId) saveCollectionToFirestore('customers', customers, currentTenantId);
-  }, [customers, currentTenantId]);
-
-  useEffect(() => { 
-    if (currentTenantId) saveCollectionToFirestore('suppliers', suppliers, currentTenantId);
-  }, [suppliers, currentTenantId]);
-
-  useEffect(() => { 
-    if (currentTenantId) saveCollectionToFirestore('sales', sales, currentTenantId);
-  }, [sales, currentTenantId]);
-
-  useEffect(() => { 
-    if (currentTenantId) saveCollectionToFirestore('purchases', purchases, currentTenantId);
-  }, [purchases, currentTenantId]);
-
-  useEffect(() => { 
-    if (currentTenantId) saveCollectionToFirestore('expenses', expenses, currentTenantId);
-  }, [expenses, currentTenantId]);
-
-  useEffect(() => { 
-    if (currentTenantId) saveCollectionToFirestore('incomes', incomes, currentTenantId);
-  }, [incomes, currentTenantId]);
-
-  useEffect(() => { 
-    if (currentTenantId) saveCollectionToFirestore('customerLedger', customerLedger, currentTenantId);
-  }, [customerLedger, currentTenantId]);
-
-  useEffect(() => { 
-    if (currentTenantId) saveCollectionToFirestore('supplierLedger', supplierLedger, currentTenantId);
-  }, [supplierLedger, currentTenantId]);
-
-  useEffect(() => { 
-    if (currentTenantId) saveCollectionToFirestore('stockMovements', stockMovements, currentTenantId);
-  }, [stockMovements, currentTenantId]);
-
-  useEffect(() => { 
-    if (currentTenantId) saveSettingsToFirestore(settings, currentTenantId);
-  }, [settings, currentTenantId]);
 
   // Complete Sale Handlers
   const handleCompleteSale = (newInvoice: SaleInvoice, newCust?: Customer) => {

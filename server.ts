@@ -3,8 +3,6 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { askShopCopilot, parseReceiptText } from './src/server/gemini';
-import { getServerSupabase } from './src/server/supabaseServer';
-import { runPostgresMigration } from './src/server/postgresDb';
 
 export function createExpressApp() {
   const app = express();
@@ -13,31 +11,11 @@ export function createExpressApp() {
 
   // API Routes FIRST
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
-
-  app.get('/api/supabase/status', async (req, res) => {
-    try {
-      const supabase = getServerSupabase();
-      const { data, error } = await supabase.from('products').select('id').limit(1);
-      res.json({
-        connected: true,
-        projectUrl: process.env.SUPABASE_URL || 'https://kbdyxoavixbzmaqltdhc.supabase.co',
-        note: error ? error.message : 'Ready',
-        timestamp: new Date().toISOString()
-      });
-    } catch (e: any) {
-      res.status(500).json({ connected: false, error: e?.message });
-    }
-  });
-
-  app.post('/api/supabase/migrate', async (req, res) => {
-    try {
-      const result = await runPostgresMigration();
-      res.json(result);
-    } catch (e: any) {
-      res.status(500).json({ success: false, error: e?.message });
-    }
+    res.json({ 
+      status: 'ok', 
+      cloud: 'Firebase Firestore & RTDB',
+      timestamp: new Date().toISOString() 
+    });
   });
 
   app.post('/api/ai/copilot', async (req, res) => {

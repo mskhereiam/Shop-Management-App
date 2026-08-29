@@ -31,11 +31,6 @@ import {
   testFirestoreConnection,
   FirebaseCustomConfig
 } from '../firebase';
-import {
-  testSupabaseConnection,
-  getSupabaseCredentials,
-  DEFAULT_SUPABASE_URL
-} from '../supabase';
 
 interface SettingsViewProps {
   settings: ShopSettings;
@@ -57,15 +52,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [pendingRestoreData, setPendingRestoreData] = useState<any | null>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoNotice, setLogoNotice] = useState<string | null>(null);
-
-  // Supabase State
-  const [supabaseCreds, setSupabaseCreds] = useState(getSupabaseCredentials());
-  const [isTestingSupabase, setIsTestingSupabase] = useState(false);
-  const [supabaseTestResult, setSupabaseTestResult] = useState<{ success: boolean; message: string; latencyMs?: number } | null>(null);
-  const [isMigrating, setIsMigrating] = useState(false);
-  const [migrationResult, setMigrationResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [showSqlSchema, setShowSqlSchema] = useState(false);
-  const [copiedSql, setCopiedSql] = useState(false);
 
   // Firebase Custom Config State
   const [activeConfig, setActiveConfig] = useState<FirebaseCustomConfig>(getActiveFirebaseConfig());
@@ -101,38 +87,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setTestResult({ success: false, message: e?.message || 'Connection test failed' });
     } finally {
       setIsTesting(false);
-    }
-  };
-
-  const handleTestSupabase = async () => {
-    setIsTestingSupabase(true);
-    setSupabaseTestResult(null);
-    try {
-      const res = await testSupabaseConnection();
-      setSupabaseTestResult(res);
-    } catch (e: any) {
-      setSupabaseTestResult({ success: false, message: e?.message || 'Supabase test failed' });
-    } finally {
-      setIsTestingSupabase(false);
-    }
-  };
-
-  const handleRunAutoMigration = async () => {
-    setIsMigrating(true);
-    setMigrationResult(null);
-    try {
-      const res = await fetch('/api/supabase/migrate', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        setMigrationResult({ success: true, message: data.message || 'সকল টেবিল সফলভাবে তৈরি হয়েছে!' });
-        handleTestSupabase();
-      } else {
-        setMigrationResult({ success: false, message: data.error || 'মাইগ্রেশন ব্যর্থ হয়েছে' });
-      }
-    } catch (e: any) {
-      setMigrationResult({ success: false, message: e?.message || 'সার্ভার যোগাযোগ ব্যর্থ হয়েছে' });
-    } finally {
-      setIsMigrating(false);
     }
   };
 
@@ -418,168 +372,83 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         )}
       </div>
 
-      {/* Supabase PostgreSQL Database & Vercel Deployment Card */}
+      {/* Firebase Cloud Services & Architecture Card */}
       <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 font-black text-sm">
-              ⚡
+            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 font-black text-sm">
+              <Flame className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2 flex-wrap">
-                Supabase PostgreSQL Cloud Database
+                Firebase Cloud Ecosystem Architecture
                 <span className="px-2 py-0.5 text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-full font-bold">
-                  ● Supabase Connected
+                  ● 100% Pure Firebase
                 </span>
               </h3>
               <p className="text-[11px] text-slate-400">
-                PostgreSQL রিলেশনাল ডাটাবেজ ইন্টিগ্রেশন ও Vercel লাইভ হোস্টিং সিঙ্ক।
+                Firestore NoSQL ডাটাবেজ, Realtime Sync, Cloud Storage ও Firebase Auth সরাসরি সংযুক্ত।
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleTestSupabase}
-              disabled={isTestingSupabase}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
-              title="Test Supabase database connectivity"
+              onClick={handleTestConnection}
+              disabled={isTesting}
+              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-sm shadow-amber-500/20 active:scale-95"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isTestingSupabase ? 'animate-spin text-emerald-400' : 'text-slate-400'}`} />
-              <span>{isTestingSupabase ? 'টেস্ট হচ্ছে...' : 'Supabase টেস্ট'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleRunAutoMigration}
-              disabled={isMigrating}
-              className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-md shadow-emerald-900/30 transition-all disabled:opacity-50"
-              title="Auto create all tables in PostgreSQL Supabase Database"
-            >
-              <Zap className={`w-3.5 h-3.5 ${isMigrating ? 'animate-bounce' : ''}`} />
-              <span>{isMigrating ? 'টেবিল তৈরি হচ্ছে...' : 'এক ক্লিকে টেবিল তৈরি করুন (Auto Init)'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowSqlSchema(!showSqlSchema)}
-              className="px-3 py-1.5 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/80 text-xs font-bold rounded-xl flex items-center gap-1.5"
-            >
-              <Database className="w-3.5 h-3.5" />
-              <span>{showSqlSchema ? 'SQL লুকান' : 'SQL স্ক্রিপ্ট'}</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin text-slate-950' : 'text-slate-950'}`} />
+              <span>{isTesting ? 'টেস্ট হচ্ছে...' : 'Firebase রি-টেস্ট'}</span>
             </button>
           </div>
         </div>
 
-        {/* Migration Alert Notification */}
-        {migrationResult && (
-          <div className={`p-2.5 rounded-xl border flex items-center justify-between text-xs animate-in fade-in ${
-            migrationResult.success
-              ? 'bg-emerald-950/40 border-emerald-700 text-emerald-300'
-              : 'bg-rose-950/40 border-rose-700 text-rose-300'
-          }`}>
-            <div className="flex items-center gap-2">
-              {migrationResult.success ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-rose-400" />}
-              <span>{migrationResult.message}</span>
+        {/* Feature Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-xl space-y-1">
+            <div className="text-[10px] text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1">
+              <Database className="w-3 h-3" /> Cloud Firestore
             </div>
-            <button
-              type="button"
-              onClick={() => setMigrationResult(null)}
-              className="text-slate-400 hover:text-slate-200 text-xs ml-2"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
-        {/* Supabase Status Info */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-xl">
-            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Project URL</div>
-            <div className="text-xs font-mono text-emerald-400 truncate mt-0.5">
-              {supabaseCreds.url}
-            </div>
+            <div className="text-xs font-semibold text-slate-200">NoSQL Document Store</div>
+            <div className="text-[11px] text-slate-400">পণ্য, ইনভয়েস ও হিসাবের পারসিস্টেন্ট ডেটা স্টোর।</div>
           </div>
 
-          <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-xl">
-            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Client Anon Key (Secured)</div>
-            <div className="text-xs font-mono text-slate-300 truncate mt-0.5">
-              {supabaseCreds.key.substring(0, 20)}...{supabaseCreds.key.substring(supabaseCreds.key.length - 10)}
+          <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-xl space-y-1">
+            <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
+              <Zap className="w-3 h-3" /> Realtime Database
             </div>
+            <div className="text-xs font-semibold text-slate-200">Instant WebSocket Sync</div>
+            <div className="text-[11px] text-slate-400">সব ডিভাইসে মিলিসেকেন্ডে লাইভ ডাটা পরিবর্তন।</div>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-xl space-y-1">
+            <div className="text-[10px] text-sky-400 font-bold uppercase tracking-wider flex items-center gap-1">
+              <Cloud className="w-3 h-3" /> Firebase Storage
+            </div>
+            <div className="text-xs font-semibold text-slate-200">Cloud File Hosting</div>
+            <div className="text-[11px] text-slate-400">পণ্যের ছবি ও শপ লোগোর পার্মানেন্ট স্টোরেজ।</div>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-xl space-y-1">
+            <div className="text-[10px] text-purple-400 font-bold uppercase tracking-wider flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3" /> Firebase Auth
+            </div>
+            <div className="text-xs font-semibold text-slate-200">Tenant Isolation</div>
+            <div className="text-[11px] text-slate-400">নিরাপদ মাল্টি-টেন্যান্ট ইউজার ডাটা প্রোটেকশন।</div>
           </div>
         </div>
 
-        {/* Supabase Ping Test Result */}
-        {supabaseTestResult && (
-          <div className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
-            supabaseTestResult.success 
-              ? 'bg-emerald-950/30 border-emerald-800 text-emerald-300' 
-              : 'bg-rose-950/30 border-rose-800 text-rose-300'
-          }`}>
-            <div className="flex items-center gap-2">
-              {supabaseTestResult.success ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-rose-400" />}
-              <span>{supabaseTestResult.message}</span>
-            </div>
-            {supabaseTestResult.latencyMs && (
-              <span className="font-mono text-[11px] px-2 py-0.5 bg-slate-900 rounded border border-slate-800">
-                {supabaseTestResult.latencyMs} ms
-              </span>
-            )}
+        {/* Info Banner */}
+        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 text-xs text-slate-300 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>সকল ডাটাবেজ অপারেশন এখন পিওর <strong>Firebase Cloud SDK</strong> দ্বারা পরিচালিত হচ্ছে।</span>
           </div>
-        )}
-
-        {/* SQL Schema helper box */}
-        {showSqlSchema && (
-          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3 animate-in fade-in text-xs">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-200">Supabase SQL Editor এ চালানোর স্ক্রিপ্ট:</span>
-              <button
-                type="button"
-                onClick={() => {
-                  const sql = `-- Supabase Schema for Store & Inventory Management\ncreate table if not exists products (\n  id text primary key,\n  name text not null,\n  barcode text,\n  sku text,\n  category_id text,\n  brand_id text,\n  unit_id text,\n  purchase_price numeric default 0,\n  sale_price numeric default 0,\n  current_stock numeric default 0,\n  min_stock numeric default 0,\n  image_url text,\n  tenant_id text default 'default',\n  created_at timestamp default now(),\n  updated_at timestamp default now()\n);\n\ncreate table if not exists sales (\n  id text primary key,\n  invoice_number text not null,\n  date text not null,\n  customer_id text,\n  customer_name text,\n  customer_phone text,\n  items jsonb not null default '[]'::jsonb,\n  subtotal numeric default 0,\n  discount numeric default 0,\n  tax numeric default 0,\n  grand_total numeric not null default 0,\n  paid_amount numeric default 0,\n  due_amount numeric default 0,\n  payment_method text,\n  tenant_id text default 'default',\n  created_at timestamp default now(),\n  updated_at timestamp default now()\n);\n\ncreate table if not exists customers (\n  id text primary key,\n  name text not null,\n  phone text,\n  email text,\n  address text,\n  total_spent numeric default 0,\n  due_amount numeric default 0,\n  tenant_id text default 'default',\n  created_at timestamp default now(),\n  updated_at timestamp default now()\n);\n\ncreate table if not exists suppliers (\n  id text primary key,\n  name text not null,\n  company_name text,\n  phone text,\n  email text,\n  address text,\n  due_amount numeric default 0,\n  tenant_id text default 'default',\n  created_at timestamp default now(),\n  updated_at timestamp default now()\n);\n\ncreate table if not exists purchases (\n  id text primary key,\n  po_number text not null,\n  date text not null,\n  supplier_id text,\n  supplier_name text,\n  items jsonb not null default '[]'::jsonb,\n  total_amount numeric not null default 0,\n  paid_amount numeric default 0,\n  due_amount numeric default 0,\n  tenant_id text default 'default',\n  created_at timestamp default now(),\n  updated_at timestamp default now()\n);\n\ncreate table if not exists expenses (\n  id text primary key,\n  title text not null,\n  category_id text,\n  amount numeric not null default 0,\n  date text not null,\n  voucher_no text,\n  payment_method text,\n  tenant_id text default 'default',\n  created_at timestamp default now(),\n  updated_at timestamp default now()\n);\n\ncreate table if not exists incomes (\n  id text primary key,\n  title text not null,\n  category_id text,\n  amount numeric not null default 0,\n  date text not null,\n  voucher_no text,\n  payment_method text,\n  tenant_id text default 'default',\n  created_at timestamp default now(),\n  updated_at timestamp default now()\n);`;
-                  navigator.clipboard.writeText(sql);
-                  setCopiedSql(true);
-                  setTimeout(() => setCopiedSql(false), 3000);
-                }}
-                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold flex items-center gap-1.5"
-              >
-                {copiedSql ? <Check className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
-                <span>{copiedSql ? 'কপি হয়েছে!' : 'SQL কোড কপি করুন'}</span>
-              </button>
-            </div>
-            <pre className="p-3 bg-slate-900 rounded-lg text-[10px] font-mono text-slate-300 overflow-x-auto max-h-48 border border-slate-800">
-{`-- Supabase SQL Editor এ পেস্ট করে Run দিন:
-create table if not exists products ( id text primary key, name text not null, barcode text, purchase_price numeric, sale_price numeric, current_stock numeric, min_stock numeric, created_at timestamp default now() );
-create table if not exists sales ( id text primary key, invoice_number text not null, items jsonb not null, grand_total numeric, paid_amount numeric, due_amount numeric, date text );
-create table if not exists customers ( id text primary key, name text not null, phone text, due_amount numeric, total_spent numeric );
-create table if not exists suppliers ( id text primary key, name text not null, company_name text, due_amount numeric );
-create table if not exists purchases ( id text primary key, po_number text not null, total_amount numeric, items jsonb );
-create table if not exists expenses ( id text primary key, title text not null, amount numeric, date text );
-create table if not exists incomes ( id text primary key, title text not null, amount numeric, date text );`}
-            </pre>
-          </div>
-        )}
-
-        {/* Vercel Environment Variables guide */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 text-xs text-slate-300 space-y-2">
-          <div className="font-bold text-slate-200 flex items-center gap-1.5">
-            <Cloud className="w-4 h-4 text-sky-400" />
-            Vercel এ ডিপ্লয় করার সময় Environment Variables সেটআপ:
-          </div>
-          <p className="text-[11px] text-slate-400">
-            Vercel Dashboard &gt; Project Settings &gt; Environment Variables এ নিচের ভ্যারিয়েবল দুটি সেভ করে Redeploy করুন:
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
-            <div className="p-2 bg-slate-900 rounded border border-slate-800">
-              <span className="text-indigo-300 block font-bold">VITE_SUPABASE_URL</span>
-              <span className="text-slate-400 text-[10px] truncate block">{DEFAULT_SUPABASE_URL}</span>
-            </div>
-            <div className="p-2 bg-slate-900 rounded border border-slate-800">
-              <span className="text-indigo-300 block font-bold">VITE_SUPABASE_ANON_KEY</span>
-              <span className="text-slate-400 text-[10px] truncate block">eyJhbGciOiJIUzI1...</span>
-            </div>
-          </div>
+          <span className="text-[10px] font-mono bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800 text-amber-300">
+            Project: {activeConfig.projectId || 'Default'}
+          </span>
         </div>
       </div>
 
